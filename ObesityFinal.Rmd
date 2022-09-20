@@ -1,0 +1,306 @@
+---
+title: "Obesity"
+author: "Darwin Stahlback , Ani Lamichhane, Karen Vuong"
+date: "12/15/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mosaic)
+library(mosaicData)
+library(lmtest)
+library(skimr)
+library(broom)
+library(readr)
+library(dplyr)
+library(janitor)
+library(dplyr)
+```
+
+```{r obesity}
+#import data
+obesity <- read_csv("Group-M-Obesity-Data.csv")
+```
+
+### Data wrangling:
+
+```{r}
+obesity <- obesity %>%  clean_names() #all column names to lower case
+obesity$caec <- tolower(obesity$caec) #all column values to lower case
+obesity$mtrans <- tolower(obesity$mtrans)#all column values to lower case
+obesity$n_obeyesdad  <- tolower(obesity$n_obeyesdad)#all column values to lower case
+
+
+
+obesity <- obesity %>%
+  mutate(massbodyindex = obesity$weight/(obesity$height*obesity$height)) #this takes original n_obeyesdad categoricals back to numeric
+obesity$is_obese = ifelse(obesity$massbodyindex<30,0,1) # creates binary if obese 0 = no / 1 = yes
+is.num <- sapply(obesity, is.numeric)
+obesity[is.num] <- lapply(obesity[is.num], round, 3) # format all numeric column to three places
+
+```
+
+```{r}
+#renaming variables
+colnames(obesity)[colnames(obesity) == "family_history_with_overweight"] = "family_history"
+
+colnames(obesity)[colnames(obesity) == "favc"] = "food_between_meals"
+
+colnames(obesity)[colnames(obesity) == "caec"] = "main_meals"
+
+colnames(obesity)[colnames(obesity) == "scc"] = "monitor_calories"
+
+colnames(obesity)[colnames(obesity) == "calc"] = "alcohol"
+
+colnames(obesity)[colnames(obesity) == "mtrans"] = "transportation"
+
+names(obesity)
+
+obesityuse = obesity%>%
+  select(gender, age, height, weight, family_history, food_between_meals, main_meals, smoke, monitor_calories, alcohol, transportation, is_obese)
+
+```
+
+### Variable Selection Multiple Logistic Regression:
+
+```{r}
+logmvarselcm1 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+main_meals+smoke+monitor_calories+alcohol+transportation, data = obesityuse, family = binomial)
+summary(logmvarselcm1)
+```
+
+```{r}
+logmvarselcm2 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+main_meals+smoke+monitor_calories+transportation, data = obesityuse, family = binomial)
+summary(logmvarselcm2)
+```
+
+```{r}
+logmvarselcm3 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+main_meals+monitor_calories+transportation, data = obesityuse, family = binomial)
+summary(logmvarselcm3)
+```
+
+### Nested likeyhood test:
+
+model without transportation and main_meals:
+```{r}
+logmvarselcm3.1 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+monitor_calories, data = obesityuse, family = binomial)
+```
+
+model without transportation:
+```{r}
+logmvarselcm3.2 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+main_meals+monitor_calories, data = obesityuse, family = binomial)
+```
+
+model without main_meals:
+```{r}
+logmvarselcm3.3 = glm(is_obese ~ gender+age+height+family_history+food_between_meals+monitor_calories+transportation, data = obesityuse, family = binomial)
+```
+
+```{r}
+lrtest(logmvarselcm3, logmvarselcm3.3)
+```
+```{r}
+lrtest(logmvarselcm3.3, logmvarselcm3)
+```
+
+### Model and Interpretation:
+
+```{r}
+bestmodel = 
+summary(bestmodel)
+exp(coef(bestmodel))
+```
+Odds Space:
+
+(copy and paste the sentences on the presentation)
+
+### Condition:
+
+Independence: Does not violate independence because the rows do not include time or spatial units.
+
+Randomness: Obesity is a random factor. You don't really know if someone will be obese or not. 
+
+Linearity of the Logit: 
+
+```{r}
+slogweight1 = glm(is_obese ~ weight, data = obesityuse, family = binomial)
+
+slogweight <- augment(slogweight1, data = obesityuse)
+slogweight <- slogweight %>%
+  mutate(odds = exp(.fitted),
+         probability = odds / (1 + odds))
+```
+```{r}
+ggplot(slogweight, aes(x = weight)) +
+  geom_line(aes(y = .fitted))
+```
+```{r}
+obesityuse <- obesityuse %>%
+  mutate(weightGroup = cut(weight, breaks = 10))
+obesityuse %>%
+  group_by(weightGroup) %>%
+  skim_without_charts(is_obese)
+```
+```{r}
+obesityuse_binned <- obesityuse %>%
+  group_by(weightGroup) %>% 
+  summarize(binnedis_obese = mean(is_obese), binnedweight = mean(weight)) %>%
+  mutate(logit = log(binnedis_obese/(1-binnedis_obese)))
+```
+```{r}
+ggplot(obesityuse_binned) +
+  geom_point(aes(x = binnedweight, y = logit)) +
+  geom_line(data = slogweight, aes(x = weight, y = .fitted))
+```
+
+```{r}
+slogage1 = glm(is_obese ~ age, data = obesityuse, family = binomial)
+
+slogage <- augment(slogage1, data = obesityuse)
+slogage <- slogage %>%
+  mutate(odds = exp(.fitted),
+         probability = odds / (1 + odds))
+```
+```{r}
+ggplot(slogage, aes(x = age)) +
+  geom_line(aes(y = .fitted))
+```
+```{r}
+obesityuse <- obesityuse %>%
+  mutate(ageGroup = cut(age, breaks = 10))
+obesityuse %>%
+  group_by(ageGroup) %>%
+  skim_without_charts(is_obese)
+```
+```{r}
+obesityuse_binned <- obesityuse %>%
+  group_by(ageGroup) %>% 
+  summarize(binnedis_obese = mean(is_obese), binnedage = mean(age)) %>%
+  mutate(logit = log(binnedis_obese/(1-binnedis_obese)))
+```
+```{r}
+ggplot(obesityuse_binned) +
+  geom_point(aes(x = binnedage, y = logit)) +
+  geom_line(data = slogage, aes(x = age, y = .fitted))
+```
+
+```{r}
+slogheight1 = glm(is_obese ~ height, data = obesityuse, family = binomial)
+
+slogheight <- augment(slogheight1, data = obesityuse)
+slogheight <- slogheight %>%
+  mutate(odds = exp(.fitted),
+         probability = odds / (1 + odds))
+```
+```{r}
+ggplot(slogheight, aes(x = height)) +
+  geom_line(aes(y = .fitted))
+```
+```{r}
+obesityuse <- obesityuse %>%
+  mutate(heightGroup = cut(height, breaks = 10))
+obesityuse %>%
+  group_by(heightGroup) %>%
+  skim_without_charts(is_obese)
+```
+```{r}
+obesityuse_binned <- obesityuse %>%
+  group_by(heightGroup) %>% 
+  summarize(binnedis_obese = mean(is_obese), binnedheight = mean(height)) %>%
+  mutate(logit = log(binnedis_obese/(1-binnedis_obese)))
+```
+```{r}
+ggplot(obesityuse_binned) +
+  geom_point(aes(x = binnedheight, y = logit)) +
+  geom_line(data = slogheight, aes(x = height, y = .fitted))
+```
+
+
+### Probability Space:
+```{r, fig.width = 10}
+mlogtransportation = glm(is_obese ~ age + transportation, data = obesityuse, family = binomial)
+
+mlogtransportation = augment(mlogtransportation, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mlogtransportation, aes(x = age, color = transportation)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+
+```{r, fig.width = 10}
+mlogfood_between_meals = glm(is_obese ~ age + food_between_meals, data = obesityuse, family = binomial)
+
+mlogfood_between_meals = augment(mlogfood_between_meals, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mlogfood_between_meals, aes(x = age, color = food_between_meals)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+
+```{r, fig.width = 10}
+mloggender = glm(is_obese ~ age + gender, data = obesityuse, family = binomial)
+
+mloggender = augment(mloggender, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mloggender, aes(x = age, color = gender)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+
+```{r, fig.width = 10}
+mlogmain_meals = glm(is_obese ~ age + main_meals, data = obesityuse, family = binomial)
+
+mlogmain_meals = augment(mlogmain_meals, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mlogmain_meals, aes(x = age, color = main_meals)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+
+```{r, fig.width = 10}
+mlogmonitor_calories = glm(is_obese ~ age + monitor_calories, data = obesityuse, family = binomial)
+
+mlogmonitor_calories = augment(mlogmonitor_calories, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mlogmonitor_calories, aes(x = age, color = monitor_calories)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+```{r, fig.width = 10}
+mlogfamily_history = glm(is_obese ~ age + family_history, data = obesityuse, family = binomial)
+
+mlogfamily_history = augment(mlogfamily_history, data = obesityuse) %>%
+  mutate(odds = exp(.fitted), 
+         probability = odds / (1 + odds))
+
+ggplot(mlogfamily_history, aes(x = age, color = family_history)) +
+  geom_point(aes(y = is_obese)) +
+  geom_line(aes(y = probability))
+```
+
+### Model Compared to Mean and Varinace of our Model:
+
+```{r, fig.width = 10}
+myplot = ggplot(obesityuse, aes(x = age, y = is_obese)) + geom_point(alpha = 0.5)
+avg = mean(obesityuse$is_obese)
+avg
+myplot + geom_hline(yintercept = avg)
+```
+
+0.4613927 percent of people are obese. 
+
+Our model is better than the mean because it explains % of the variability.
+
